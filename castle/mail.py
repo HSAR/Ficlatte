@@ -16,6 +16,7 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from string import Template
 from django.core.mail import send_mail
 from django.core.urlresolvers import reverse
 from django.conf import settings
@@ -23,17 +24,26 @@ from .models import *
 
 def send_conf_email(profile, token):
     url = getattr(settings, 'SITE_URL', 'http://www.example.com/')
-    
-    mail_message  = "Hi.\nThis is the Ficlatte server.  You, or someone claiming\n";
-    mail_message += "to be you registered at https://ficlatte.com\n\n";
-    mail_message += "If this really is you, please click on the following link:\n\n";
-    mail_message += "{}/confirmation/yes/{}/{}\n\n".format(url, profile.id, token);
-    mail_message += "If this is not you, click on the link below and we'll never\n";
-    mail_message += "send you e-mail ever again:\n\n";
-    mail_message += "{}/confirmation/no/{}/{}\n\n".format(url, profile.id, token);
-    mail_message += "Best regards,\n\n";
-    mail_message += "The ficlatte team\n";
-    
+
+    mail_template = Template("""Hi.
+This is the Ficlatte server.  You, or someone claiming
+to be you registered at https://ficlatte.com
+
+If this really is you, please click on the following link:
+
+$url/confirmation/yes/$profile_id/$token
+
+If this is not you, click on the link below and we'll never
+send you e-mail ever again:
+
+$url/confirmation/no/$profile_id/$token
+
+Best regards,
+
+The ficlatte team""")
+
+    mail_message = mail_template.substitute(url=url, profile_id=profile.id, token=token)
+
     send_mail('Ficlatte e-mail confirmation',
               mail_message,
               'Ficlatte Team <noreply@ficlatte.com>',
@@ -55,40 +65,51 @@ def send_notification_email_comment(com):
         parent = com.story
         parent_type = u'story'
         subs = Subscription.objects.filter(story=parent)
-        url1 = u'{}{}'.format(url, reverse('story', args=[parent.id]))
+        parent_url = u'{}{}'.format(url, reverse('story', args=[parent.id]))
         unsub_url = u'{}{}'.format(url, reverse('story-unsub', args=[parent.id]))
 
     elif (com.blog):
         parent = com.blog
         parent_type = u'blog'
         subs = Subscription.objects.filter(blog=parent)
-        url1 = u'{}{}'.format(url, reverse('blog', args=[parent.id]))
+        parent_url = u'{}{}'.format(url, reverse('blog', args=[parent.id]))
         unsub_url = u'{}{}'.format(url, reverse('blog-unsub', args=[parent.id]))
-        
+
     else:
         # Neither a blog nor a story, something weird is going on,
         # so just bug out here
         return None
-    
+
     # Build e-mail text
-    subject  = u'Ficlatte comment on '+parent.title+u' by '+com.user.pen_name
-    
-    message  = u"Hi.\nThis is the Ficlatte server.  You are currently subscribed to "
-    message += u"receive notifications of new comments posted to Ficlatte "+parent_type+" "
-    message += u'"'+parent.title+u'".\n\n'
-    message += com.user.pen_name+u' just posted a comment:\n\n'
-    message += com.body
-    message += u'\n\nTo see the comment at Ficlatte, click here:\n'
-    message += url1+u'\n'
-    message += u'To stop receiving notifications of comments on this '+parent_type+u', click here:\n'
-    message += unsub_url+u'\n'
-    message += u'To adjust your e-mail preferences, update your profile here:\n'
-    message += u'{}{}'.format(url, reverse('profile'))
-    message += u'\n\nKeep writing!\n\nThe Ficlatte team\n'
+    subject = Template('Ficlatte comment on $parent_title by $comment_user').substitute(parent_title=parent.title, comment_user=com.user.pen_name)
+
+    message_template = Template("""Hi.
+This is the Ficlatte server.  You are currently subscribed to receive notifications of new comments posted to Ficlatte $parent_type "$parent_title".
+
+$comment_user just posted a comment:
+
+$comment_body
+
+To see the comment at Ficlatte, click here:
+$parent_url
+To stop receiving notifications of comments on this story, click here:
+$parent_unsub_url
+To adjust your e-mail preferences, update your profile here:
+$user_profile_url
+
+Keep writing!
+
+The Ficlatte team""")
+
+    message = message_template.substitute(
+        parent_type=parent_type, parent_title=parent.title,
+        comment_user=com.user.pen_name, comment_body=com.body,
+        parent_url=parent_url, parent_unsub_url=unsub_url,
+        user_profile_url=(url + reverse('profile')))
 
     # Loop through everyone subscribed to this thread
-    for s in subs:
+    for sub in subs:
         # But only send messages to people other than the comment author
-        if (s.user != com.user):
-            send_notification_email(s.user, subject, message)
+        if sub.user != com.user:
+            send_notification_email(sub.user, subject, message)
 
