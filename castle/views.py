@@ -687,7 +687,12 @@ def submit_story(request):
 
     # Is the story being published?
     if (not story.draft and (was_draft or new_story)):
+        # Set the publish time and send notifications to subscribed users of the prequel/sequel (if applicable)
         story.ptime = timezone.now()
+        if (prequel_to):
+            send_notification_email_story(comment, prequel_to)
+        elif (sequel_to):
+            send_notification_email_story(comment, sequel_to)
     
     # Set modification time
     story.mtime = timezone.now()
