@@ -19,7 +19,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
-from datetime import date
+from datetime import date, datetime
 
 # Create your models here.
 
@@ -72,7 +72,7 @@ class Profile(models.Model):
         return unicode(self.pen_name)
     
     def email_authenticated(self):
-        return (self.email_auth == 0L)
+        return (self.email_auth == 0L) and (not self.spambot)
     
     def is_friend(self, other):
         return self.friends.filter(id=other.id).exists()
@@ -355,4 +355,23 @@ class Subscription(models.Model):
             r += u' subscribed to sequels '+unicode(self.story)
         if (self.ch_entry is not None):
             r += u' subscribed to entries on challenge '+unicode(self.challenge)
+        return r
+
+class DebugLog(models.Model):
+    uid         = models.IntegerField(default=0)
+    timestamp   = models.IntegerField()
+    log         = models.CharField(max_length = 2048)
+    
+    def __unicode__(self):
+        # Generate human-readable date
+        r = datetime.utcfromtimestamp(self.timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Add user ID
+        if (self.uid >= 1):
+            r += str(self.uid)
+            #r += u': '+unicode(Profile.objects.get(pk=self.uid))+ u' - '
+        else:
+            r += u': <no user> - '
+        
+        r += self.log
         return r
